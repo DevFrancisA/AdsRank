@@ -19,7 +19,7 @@
       ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
       ort.env.wasm.numThreads = 1;
       const [demo, vecBuf, ranker, tower] = await Promise.all([
-        fetch("assets/demo.json").then((r) => r.json()),
+        fetch(`assets/demo.json?v=${window.ARK_VERSION || ""}`).then((r) => r.json()),
         fetch("assets/item_vectors.bin").then((r) => r.arrayBuffer()),
         ort.InferenceSession.create("assets/ranker_web.onnx", { executionProviders: ["wasm"] }),
         ort.InferenceSession.create("assets/query_tower_web.onnx", { executionProviders: ["wasm"] }),

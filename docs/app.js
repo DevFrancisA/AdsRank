@@ -31,7 +31,8 @@
 
   toc();
   schematic();
-  fetch("assets/demo.json").then((r) => r.json()).then((D) => {
+  blockdiag(null);  // drawn up front; ad-pin labels are filled in once demo.json arrives
+  fetch(`assets/demo.json?v=${window.ARK_VERSION || ""}`).then((r) => r.json()).then((D) => {
     $$("[data-k]").forEach((n) => {
       if (n.dataset.k === "item_key") n.textContent = D.key_field;
       if (n.dataset.k === "item_fields") n.textContent = D.item_fields.join(", ");
@@ -74,7 +75,7 @@
   }
 
   function blockdiag(D) {
-    const it = D.item_fields;
+    const it = D ? D.item_fields : ["ad fields"];
     $("#blockdiag").innerHTML = arrowDef("ah2") + `
       <rect x="6" y="20" width="948" height="130" fill="none" stroke="var(--ink-3)" stroke-dasharray="5 4"/><text x="14" y="36" class="sm">ONLINE PATH (per request)</text>
       <rect x="6" y="170" width="948" height="122" fill="none" stroke="var(--ink-3)" stroke-dasharray="5 4"/><text x="14" y="186" class="sm">OFFLINE (training / index build)</text>
