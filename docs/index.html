@@ -179,11 +179,13 @@
   <p>DeepFM (Guo et al., 2017) sums three terms that read the <b>same</b> 16-d embeddings: a first-order linear term, the factorisation-machine pairwise term ½[(Σv)² − Σv²], and a 400-400-400 MLP with batch norm and dropout. Training uses Adam, evaluates on validation four times per epoch, decays the learning rate on every non-improving evaluation, and stops after two. Embedding L2 is chosen per configuration on validation log loss — DeepFM overfits within its second epoch without it.</p>
   <h4>7.3.3 Ad / Context Split</h4>
   <p>Retrieval needs an item side, but Criteo's fields are anonymous. Attributes of one entity are functionally dependent, so for every pair of categorical fields the sheet computes the normalised conditional entropy U(J|K) = H(J|K)/H(J) (Figure 6-6). High-cardinality fields that pin down several others (U &lt; <span data-k="u_thresh"></span>) are candidate ad keys. Several qualify, so each candidate catalog is scored by the trained DeepFM and the entity whose ranking depends <i>most</i> on the query is kept (Table 7-1): <b data-k="item_key"></b>, carrying <span data-k="item_fields"></span>. The catalog is the <span data-k="n_items"></span> most frequent keys, each with its modal attributes.</p>
+  <div class="keep">
   <div class="tbl-wrap"><table id="probe">
     <caption>Table 7-1. Candidate Ad Entities</caption>
     <thead><tr><th>Key</th><th>Fields</th><th class="r">Distinct top-10<sup class="fn">(1)</sup></th><th class="r">Global 1% list retains<sup class="fn">(2)</sup></th></tr></thead><tbody></tbody>
   </table></div>
   <p class="tnote">(1) Distinct items across 200 queries' top-10 ÷ 2,000. (2) Retention@10 of one shortlist, shared by every query, holding the top 1% of items by mean DeepFM logit. Lower = more query-dependent.</p>
+  </div>
   <h4>7.3.4 Two-Tower Retrieval, Distilled from the Ranker</h4>
   <p>Both towers embed their fields and pass them through a 256-128-64 MLP to unit-norm vectors. A click-trained tower (in-batch sampled softmax with logQ correction) learns <i>what gets clicked</i>, but the funnel must find <i>what DeepFM will rank highest</i>. The distilled tower therefore minimises KL(teacher ‖ student) between the softmax of DeepFM logits and of tower scores over slates of 128 uniformly sampled items plus the student's own current top-64 (hard negatives). Each item also learns a scalar bias stored as an extra vector coordinate (the query appends a constant 1), so inner-product search in FAISS reproduces the tower score exactly.</p>
   <div class="callout" id="prior-note"></div>

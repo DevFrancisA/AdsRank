@@ -129,7 +129,7 @@
     }
     {
       const cv = ret.curves, at = (k, fr) => cv[k].find((c) => Math.abs(c.frac - fr) < 1e-9);
-      const lo = (cv.two_tower_distilled.find((c) => Math.abs(c.frac - 0.005) < 1e-9) || cv.two_tower_distilled[0]).frac;
+      const lo = cv.two_tower_distilled[0].frac;  // tightest budget: where the shortlist actually has to be right
       const pr = at("ranker_prior", lo), di = at("two_tower_distilled", lo), cl = at("two_tower_clicks", ret.headline_frac);
       $("#prior-note").innerHTML = `<b>Read this first</b>On Criteo, DeepFM orders catalog items largely by item main effects: one global shortlist of the top ${f.pct(lo, 1)} of items (by mean DeepFM logit) already retains ${f.pct(pr.retention)} of each query's top-10, and ${f.pct(at("ranker_prior", ret.headline_frac).retention)} at the ${f.pct(ret.headline_frac, 0)} headline budget. ` +
         `The distilled tower's job is the query-dependent remainder: at ${f.pct(lo, 1)} it retains ${f.pct(di.retention)}, cutting the global list's misses by ${f.pct(1 - (1 - di.retention) / Math.max(1e-9, 1 - pr.retention), 0)}. The click-trained tower — the textbook retrieval objective — retains only ${f.pct(cl.retention)} at the headline budget: it learns which ads were <i>served</i> to which contexts, not which ones the ranker scores highest.`;

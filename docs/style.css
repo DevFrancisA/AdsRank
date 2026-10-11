@@ -106,6 +106,7 @@ ul.feat ul li::before { content: "–"; position: absolute; left: 0; }
 .twocol { columns: 2; column-gap: 40px; }
 .twocol h4 { break-after: avoid; margin-top: 0; padding-top: 8px; }
 .twocol p { break-inside: avoid-column; orphans: 3; widows: 3; }
+.keep { break-inside: avoid; }
 
 /* ---------- tables ---------- */
 .tbl-wrap { overflow-x: auto; margin: 6px 0 4px; }
