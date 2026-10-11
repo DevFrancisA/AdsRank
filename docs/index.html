@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AdsRank ARK-3 Datasheet</title>
+<meta name="description" content="AdsRank: a three-stage CTR ranking engine on Criteo — DeepFM ranker, two-tower + FAISS retrieval, ONNX Runtime C++ serving. Every number on this page is produced by the code in the repository.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='7' y='3' width='18' height='26' fill='%23fdfcf8' stroke='%23171716' stroke-width='2'/%3E%3Cg stroke='%23171716' stroke-width='2'%3E%3Cpath d='M3 9h4M3 14h4M3 19h4M3 24h4M25 9h4M25 14h4M25 19h4'/%3E%3C/g%3E%3Cpath d='M25 24h4' stroke='%23c0161c' stroke-width='2'/%3E%3Ccircle cx='12' cy='8' r='1.6' fill='%23171716'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Archivo+Narrow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================================================================ PAGE 1 -->
+<article class="sheet" id="top">
+  <div class="toolbar">
+    <button type="button" data-theme-set="light" aria-pressed="false">Paper</button>
+    <button type="button" data-theme-set="dark" aria-pressed="false">Night</button>
+  </div>
+  <header class="runhead">
+    <span class="pn">ARK-3</span>
+    <span class="mid">AdsRank · Three-Stage CTR Ranking Engine</span>
+    <span class="doc">ARK-DS-001A – <span data-k="month"></span></span>
+  </header>
+
+  <div class="titleblock">
+    <div>
+      <h1><span class="pn">ARK-3 · ADSRANK</span>Three-Stage Click-Through-Rate Ranking Engine</h1>
+      <p class="sub">Two-tower retrieval &nbsp;▸&nbsp; FAISS candidate recall &nbsp;▸&nbsp; DeepFM fine-ranking &nbsp;▸&nbsp; ONNX Runtime C++ serving. Trained and characterised on <span data-k="rows"></span> Criteo display-ad impressions.</p>
+    </div>
+    <div class="stamp">Measured, not quoted<b>REV A</b></div>
+  </div>
+
+  <div class="cols">
+    <section>
+      <h2 id="s1"><span class="n">1</span>Features</h2>
+      <ul class="feat">
+        <li><b>DeepFM ranker</b> with learned field embeddings
+          <ul>
+            <li>Held-out AUC <span class="num" data-k="auc_lr"></span> → <span class="num hl" data-k="auc_deepfm"></span> vs. logistic regression</li>
+            <li>Log loss <span class="num hl" data-k="ll_rel"></span> lower on the same features</li>
+            <li>Four-way feature-interaction ablation (LR / FM / DNN / DeepFM)</li>
+          </ul>
+        </li>
+        <li><b>Ranker-distilled two-tower retrieval</b>
+          <ul>
+            <li><span class="num hl" data-k="ret_head"></span> of the exhaustive ranker's top-10 retained</li>
+            <li>while the ranker scores <span class="num" data-k="ret_fewer"></span> fewer items</li>
+            <li>At a <span data-k="tight_frac"></span> budget (<span data-k="tight_k"></span> items): <span class="num hl" data-k="tight_ret"></span> vs <span class="num" data-k="tight_prior"></span> for one global shortlist</li>
+          </ul>
+        </li>
+        <li><b>FAISS IVF candidate recall</b>, inner-product exact w.r.t. the tower score</li>
+        <li><b>ONNX export + C++ inference harness</b>
+          <ul>
+            <li>p95 ranking latency <span class="num" data-k="lat_base"></span> → <span class="num hl" data-k="lat_best"></span> at batch <span data-k="batch"></span></li>
+            <li>Thread-count sweep and reusable IoBinding buffers</li>
+          </ul>
+        </li>
+        <li>Runs live in this page — <a href="#s8">evaluation board</a></li>
+      </ul>
+    </section>
+    <section>
+      <h2 id="s2"><span class="n">2</span>Applications</h2>
+      <ul class="feat">
+        <li>Display-advertising auctions (pCTR × bid)</li>
+        <li>Sponsored-search and feed candidate ranking</li>
+        <li>Offline funnel-budget studies: how many ranker calls a request actually needs</li>
+        <li>Teaching reference for retrieval ↔ ranking consistency</li>
+      </ul>
+      <h2 id="s3"><span class="n">3</span>Description</h2>
+      <p>ARK-3 is a complete, reproducible ad-ranking stack built on a <span data-k="rows"></span>-impression sample of the Criteo click logs. A DeepFM ranker models second-order and deep feature interactions over 39 embedded fields. A two-tower model, trained to imitate that ranker, maps contexts and ads into one vector space so FAISS can shortlist candidates; DeepFM then re-scores only the shortlist.</p>
+      <p>The ranker is exported to ONNX and served from a C++ harness built on ONNX Runtime, where thread placement and buffer reuse are tuned against a fixed request shape: one context × <span data-k="batch"></span> candidates.</p>
+      <div class="tbl-wrap">
+        <table>
+          <caption>Device Information<sup class="fn">(1)</sup></caption>
+          <thead><tr><th>Part</th><th>Package</th><th>Body size</th></tr></thead>
+          <tbody id="devinfo"><tr><td colspan="3" class="loading">loading…</td></tr></tbody>
+        </table>
+      </div>
+      <p class="tnote">(1) Artifacts as produced by <code>scripts/run_all.sh</code>; see <a href="#s10">Packaging</a>.</p>
+    </section>
+
+    <div class="span schem">
+      <div class="ttl">Simplified Schematic</div>
+      <svg id="schematic" viewBox="0 0 960 190" role="img" aria-label="Funnel: catalog to two-tower and FAISS retrieval, then DeepFM ranking, then top 10"></svg>
+    </div>
+  </div>
+
+  <footer class="runfoot"><span>An <b>IMPORTANT NOTICE</b>: all figures are regenerated by the code in the <a href="https://github.com/DevFrancisA/AdsRank">repository</a>; nothing on this sheet is hand-entered.</span><span class="pg">1</span></footer>
+</article>
+
+<!-- ================================================================ PAGE 2 -->
+<article class="sheet">
+  <header class="runhead"><span class="pn">ARK-3</span><span class="mid">AdsRank · Three-Stage CTR Ranking Engine</span><span class="doc">ARK-DS-001A – <span data-k="month"></span></span></header>
+  <h2 style="margin-top:0">Table of Contents</h2>
+  <nav class="toc" id="toc"></nav>
+
+  <h2 id="s4"><span class="n">4</span>Revision History</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:110px">Change</th><th>Description</th></tr></thead>
+      <tbody id="revhist"></tbody>
+    </table>
+  </div>
+
+  <h2 id="s5"><span class="n">5</span>Pin Configuration and Functions</h2>
+  <p class="lead">Each of the 39 Criteo fields enters the ranker as one embedded "pin". Pins drawn in <span class="hl"><b>red</b></span> belong to the <b>ad</b> side of the retrieval split; the rest describe the request <b>context</b>. Criteo does not disclose field semantics, so the split is inferred from the data (§7.3.3). Hover a pin.</p>
+  <div class="pinout">
+    <figure>
+      <svg id="pinout" viewBox="0 0 440 600" role="img" aria-label="40-pin package diagram of model inputs"></svg>
+      <figcaption>40-Pin Package (Field View)<span class="cond">Top view · 39 inputs + pCTR output</span></figcaption>
+    </figure>
+    <div>
+      <div class="tbl-wrap">
+        <table id="pintable">
+          <caption>Pin Functions</caption>
+          <thead><tr><th class="c">No.</th><th>Name</th><th class="c">I/O</th><th>Side</th><th class="r">Card.<sup class="fn">(1)</sup></th><th>Description</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="tnote">(1) Embedding rows: vocabulary fit on train only; values seen &lt; <span data-k="min_count"></span> times share an OOV row; missing has its own row.</p>
+    </div>
+  </div>
+  <footer class="runfoot"><span>Submit document feedback: <a href="https://github.com/DevFrancisA/AdsRank/issues">github.com/DevFrancisA/AdsRank/issues</a></span><span class="pg">2</span></footer>
+</article>
+
+<!-- ================================================================ PAGE 3 -->
+<article class="sheet">
+  <header class="runhead"><span class="pn">ARK-3</span><span class="mid">AdsRank · Three-Stage CTR Ranking Engine</span><span class="doc">ARK-DS-001A – <span data-k="month"></span></span></header>
+  <h2 id="s6" style="margin-top:0"><span class="n">6</span>Specifications</h2>
+
+  <h3 id="s6-1"><span>6.1</span>Recommended Operating Conditions</h3>
+  <div class="tbl-wrap"><table id="roc">
+    <thead><tr><th>Parameter</th><th>Condition</th><th class="c">Value</th></tr></thead><tbody></tbody>
+  </table></div>
+
+  <h3 id="s6-2"><span>6.2</span>Ranking Characteristics</h3>
+  <p class="tnote" style="margin:0 0 4px">Over operating conditions of §6.1. MIN / MAX are taken over training seeds or over queries where stated; TYP is the reported value.</p>
+  <div class="tbl-wrap"><table id="chars">
+    <thead><tr><th>Parameter</th><th>Test conditions</th><th class="c">Min</th><th class="c">Typ</th><th class="c">Max</th><th class="c">Unit</th></tr></thead><tbody></tbody>
+  </table></div>
+
+  <h3 id="s6-3"><span>6.3</span>Interaction Ablation</h3>
+  <div class="tbl-wrap"><table id="ablation">
+    <thead><tr><th>Configuration</th><th class="c">Linear</th><th class="c">FM (2nd order)</th><th class="c">Deep MLP</th><th class="r">Params</th><th class="c">Emb. L2</th><th class="r">Test AUC</th><th class="r">Test log loss</th><th class="r">Δ log loss vs LR</th></tr></thead><tbody></tbody>
+  </table></div>
+  <p class="tnote">Every configuration shares the encoder, optimiser (Adam), early-stopping rule and validation-selected embedding L2. Test metrics are on <span data-k="n_test"></span> held-out impressions, scored once with the best-validation checkpoint.</p>
+  <div class="callout" id="ablation-note"></div>
+
+  <footer class="runfoot"><span>Copyright © 2026, AdsRank project · MIT licensed</span><span class="pg">3</span></footer>
+</article>
+
+<!-- ================================================================ PAGE 4 -->
+<article class="sheet">
+  <header class="runhead"><span class="pn">ARK-3</span><span class="mid">AdsRank · Three-Stage CTR Ranking Engine</span><span class="doc">ARK-DS-001A – <span data-k="month"></span></span></header>
+  <h3 id="s6-4" style="margin-top:0"><span>6.4</span>Typical Characteristics</h3>
+  <p class="tnote" style="margin:0 0 14px">Measured on the operating conditions of §6.1 unless otherwise noted. Hover any plot for values; each figure carries its tabulated data.</p>
+  <div class="figs" id="figs"></div>
+  <footer class="runfoot"><span>Copyright © 2026, AdsRank project</span><span class="pg">4</span></footer>
+</article>
+
+<!-- ================================================================ PAGE 5 -->
+<article class="sheet">
+  <header class="runhead"><span class="pn">ARK-3</span><span class="mid">AdsRank · Three-Stage CTR Ranking Engine</span><span class="doc">ARK-DS-001A – <span data-k="month"></span></span></header>
+  <h2 id="s7" style="margin-top:0"><span class="n">7</span>Detailed Description</h2>
+  <h3 id="s7-1"><span>7.1</span>Overview</h3>
+  <p>A request arrives with a context (the 34 context pins). Stage one encodes it with the query tower; stage two asks a FAISS IVF index for the <span data-k="k_head"></span> catalog items with the highest tower score; stage three runs DeepFM on exactly those pairs and returns the top-10 by predicted click probability. The offline benchmark compares that output against an <i>oracle</i> that runs DeepFM on every one of the <span data-k="n_items"></span> catalog items.</p>
+
+  <h3 id="s7-2"><span>7.2</span>Functional Block Diagram</h3>
+  <div class="schem"><svg id="blockdiag" viewBox="0 0 960 300" role="img" aria-label="Detailed block diagram"></svg></div>
+
+  <h3 id="s7-3"><span>7.3</span>Feature Description</h3>
+  <div class="twocol">
+  <h4>7.3.1 Field Encoding</h4>
+  <p>Count features (I1–I13) are discretised: values ≤ 2 keep their own bucket, larger values map to ⌊ln²(x)⌋, the transform used by the winning Kaggle Criteo solutions. Categorical features (C1–C26) get a train-only vocabulary with a frequency floor of <span data-k="min_count"></span>. Every field then indexes one shared embedding table (<span data-k="emb_rows"></span> rows); per-field offsets live inside the model so the exported graph consumes the raw <code>int64[B, 39]</code> tensor.</p>
+  <h4>7.3.2 DeepFM Ranker</h4>
+  <p>DeepFM (Guo et al., 2017) sums three terms that read the <b>same</b> 16-d embeddings: a first-order linear term, the factorisation-machine pairwise term ½[(Σv)² − Σv²], and a 400-400-400 MLP with batch norm and dropout. Training uses Adam, evaluates on validation four times per epoch, decays the learning rate on every non-improving evaluation, and stops after two. Embedding L2 is chosen per configuration on validation log loss — DeepFM overfits within its second epoch without it.</p>
+  <h4>7.3.3 Ad / Context Split</h4>
+  <p>Retrieval needs an item side, but Criteo's fields are anonymous. Attributes of one entity are functionally dependent, so for every pair of categorical fields the sheet computes the normalised conditional entropy U(J|K) = H(J|K)/H(J) (Figure 6-6). High-cardinality fields that pin down several others (U &lt; <span data-k="u_thresh"></span>) are candidate ad keys. Several qualify, so each candidate catalog is scored by the trained DeepFM and the entity whose ranking depends <i>most</i> on the query is kept (Table 7-1): <b data-k="item_key"></b>, carrying <span data-k="item_fields"></span>. The catalog is the <span data-k="n_items"></span> most frequent keys, each with its modal attributes.</p>
+  <div class="tbl-wrap"><table id="probe">
+    <caption>Table 7-1. Candidate Ad Entities</caption>
+    <thead><tr><th>Key</th><th>Fields</th><th class="r">Distinct top-10<sup class="fn">(1)</sup></th><th class="r">Global 1% list retains<sup class="fn">(2)</sup></th></tr></thead><tbody></tbody>
+  </table></div>
+  <p class="tnote">(1) Distinct items across 200 queries' top-10 ÷ 2,000. (2) Retention@10 of one shortlist, shared by every query, holding the top 1% of items by mean DeepFM logit. Lower = more query-dependent.</p>
+  <h4>7.3.4 Two-Tower Retrieval, Distilled from the Ranker</h4>
+  <p>Both towers embed their fields and pass them through a 256-128-64 MLP to unit-norm vectors. A click-trained tower (in-batch sampled softmax with logQ correction) learns <i>what gets clicked</i>, but the funnel must find <i>what DeepFM will rank highest</i>. The distilled tower therefore minimises KL(teacher ‖ student) between the softmax of DeepFM logits and of tower scores over slates of 128 uniformly sampled items plus the student's own current top-64 (hard negatives). Each item also learns a scalar bias stored as an extra vector coordinate (the query appends a constant 1), so inner-product search in FAISS reproduces the tower score exactly.</p>
+  <div class="callout" id="prior-note"></div>
+  <h4>7.3.5 FAISS Candidate Recall</h4>
+  <p>Item vectors (<span data-k="faiss_dim"></span>-d) go into an <code>IndexIVFFlat</code> with <span data-k="faiss_nlist"></span> lists, probed at nprobe = <span data-k="faiss_nprobe"></span>. At the headline budget the IVF search recovers <span class="num" data-k="faiss_recall"></span> of the exact inner-product shortlist.</p>
+  <h4>7.3.6 ONNX Export and C++ Harness</h4>
+  <p>The ranker is exported (opset 18, dynamic batch, sigmoid in-graph) and verified against PyTorch on 20,000 held-out rows (max |Δp| = <span data-k="parity"></span>). <code>cpp/bench.cpp</code> replays <span data-k="n_req"></span> real fine-ranking requests through ONNX Runtime <span data-k="ort_version"></span> and reports latency percentiles.</p>
+  </div>
+
+  <h3 id="s7-4"><span>7.4</span>Device Functional Modes</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Mode</th><th>Session</th><th>Per request</th></tr></thead>
+    <tbody>
+      <tr><td><b>PyTorch eager</b></td><td><code>nn.Module</code>, <code>torch.no_grad()</code>, torch default threads</td><td>tensor from NumPy, forward, copy out</td></tr>
+      <tr><td><b>ORT · Python</b></td><td><code>InferenceSession</code>, defaults</td><td><code>sess.run</code> with a NumPy feed</td></tr>
+      <tr><td><b>ORT · C++ naive</b></td><td>default <code>SessionOptions</code></td><td>fresh input vector + tensor; <code>Run()</code> allocates the output</td></tr>
+      <tr><td><b>ORT · C++ tuned</b></td><td>intra-op threads = <i>n</i>, inter-op 1, sequential executor, spin-wait, all graph optimisations</td><td><code>memcpy</code> into one pre-bound input buffer; output written into a pre-bound buffer via <code>IoBinding</code></td></tr>
+    </tbody>
+  </table></div>
+  <footer class="runfoot"><span>Copyright © 2026, AdsRank project</span><span class="pg">5</span></footer>
+</article>
+
+<!-- ================================================================ PAGE 6 -->
+<article class="sheet">
+  <header class="runhead"><span class="pn">ARK-3</span><span class="mid">AdsRank · Three-Stage CTR Ranking Engine</span><span class="doc">ARK-DS-001A – <span data-k="month"></span></span></header>
+  <h2 id="s8" style="margin-top:0"><span class="n">8</span>Application and Implementation</h2>
+  <h3 id="s8-1"><span>8.1</span>Typical Application — Evaluation Board</h3>
+  <p>The board below is the real funnel running in your browser through <code>onnxruntime-web</code>: the trained query tower, the <span data-k="n_items"></span> item vectors, and the DeepFM ranker (embedding table pruned to the rows this board can address). Pick a held-out impression, pull context pins to <i>missing</i>, and compare the funnel's top-10 with the ranker scoring the entire catalog.</p>
+
+  <div class="evm" id="evm">
+    <div class="evm-head"><span>ARK-3 EVM · Live Funnel</span><span class="led" id="evm-led">idle</span></div>
+    <div class="evm-body">
+      <div class="ctrl">
+        <label>Impression <select id="q-sel"></select></label>
+        <label>Budget K <input type="range" id="k-rng" min="10" max="3000" step="1" value="992"> <span class="mono" id="k-val">1000</span></label>
+        <button class="btn" id="btn-reset" type="button">Reset pins</button>
+        <button class="btn primary" id="btn-run" type="button" disabled>Run funnel</button>
+      </div>
+      <div>
+        <div class="tnote" style="margin:0 0 4px">CONTEXT HEADER — click a pin to force it to <i>missing</i></div>
+        <div class="header-pins" id="pins"></div>
+      </div>
+      <div class="readouts">
+        <div class="ro"><div class="k">Retention@10</div><div class="v" id="ro-ret">—</div><div class="s">funnel ∩ exhaustive</div></div>
+        <div class="ro"><div class="k">Ranker calls</div><div class="v" id="ro-calls">—</div><div class="s" id="ro-calls-s">vs. full catalog</div></div>
+        <div class="ro"><div class="k">Funnel time</div><div class="v" id="ro-tf">—</div><div class="s">tower + search + rank</div></div>
+        <div class="ro"><div class="k">Exhaustive time</div><div class="v" id="ro-te">—</div><div class="s">DeepFM × all items</div></div>
+      </div>
+      <div class="bar" aria-hidden="true"><i id="evm-bar"></i></div>
+      <div class="lists">
+        <div><h4>Funnel top-10 <span class="tnote">(tower → top-K → DeepFM)</span></h4><ol class="rank pending" id="list-f"></ol></div>
+        <div><h4>Exhaustive top-10 <span class="tnote">(DeepFM × catalog)</span></h4><ol class="rank pending" id="list-e"></ol></div>
+      </div>
+      <p class="note">In-browser shortlisting uses exact inner product over the item vectors (10k × <span data-k="faiss_dim"></span> floats is a few milliseconds of JavaScript); the offline benchmark uses the FAISS IVF index of §7.3.5. WebAssembly runs single-threaded on GitHub Pages, so absolute times here are slower than the C++ numbers in Figure 6-4.</p>
+    </div>
+  </div>
+
+  <h3 id="s8-2"><span>8.2</span>Layout Guidelines</h3>
+  <ul class="feat">
+    <li>Size the shortlist from Figure 6-3, not from habit: the distilled tower's retention curve flattens well before the click-trained tower's does.</li>
+    <li>Retrieval quality is bounded by <b>agreement with the ranker</b>, not by click AUC — distil the ranker into the retriever.</li>
+    <li>On CPU, pin intra-op threads to the knee of Figure 6-4 instead of the core count, and keep request buffers alive across calls.</li>
+  </ul>
+  <footer class="runfoot"><span>Copyright © 2026, AdsRank project</span><span class="pg">6</span></footer>
+</article>
+
+<!-- ================================================================ PAGE 7 -->
+<article class="sheet">
+  <header class="runhead"><span class="pn">ARK-3</span><span class="mid">AdsRank · Three-Stage CTR Ranking Engine</span><span class="doc">ARK-DS-001A – <span data-k="month"></span></span></header>
+  <h2 id="s9" style="margin-top:0"><span class="n">9</span>Device and Documentation Support</h2>
+  <h3><span>9.1</span>Reproducing This Sheet</h3>
+<pre><span class="c"># Linux (tested on Ubuntu 26.04 / WSL2), Python 3.12</span>
+git clone https://github.com/DevFrancisA/AdsRank && cd AdsRank
+python -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+bash scripts/run_all.sh        <span class="c"># download → train → retrieve → export → bench → site data</span>
+python -m http.server -d docs  <span class="c"># open http://localhost:8000</span></pre>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Stage</th><th>Entry point</th><th>Writes</th></tr></thead>
+    <tbody>
+      <tr><td>Data</td><td><code>python -m adsrank.data</code></td><td>encoded splits, vocabulary</td></tr>
+      <tr><td>Ranker + ablation</td><td><code>python -m adsrank.train_ranker</code></td><td><code>results/runs/*.json</code></td></tr>
+      <tr><td>Field split</td><td><code>python -m adsrank.fields</code></td><td><code>results/field_split.json</code></td></tr>
+      <tr><td>Retrieval benchmark</td><td><code>python -m adsrank.retrieval</code></td><td><code>results/retrieval.json</code></td></tr>
+      <tr><td>ONNX export</td><td><code>python -m adsrank.export</code></td><td><code>deepfm.onnx</code>, request replay file</td></tr>
+      <tr><td>Latency</td><td><code>python -m adsrank.bench_py</code>, <code>scripts/bench_cpp.sh</code></td><td><code>results/latency_*.json*</code></td></tr>
+      <tr><td>This sheet</td><td><code>python -m adsrank.export_site</code></td><td><code>docs/assets/*</code></td></tr>
+    </tbody>
+  </table></div>
+  <h3><span>9.2</span>Related Documentation</h3>
+  <ul class="feat">
+    <li>Guo et al., <i>DeepFM: A Factorization-Machine based Neural Network for CTR Prediction</i>, IJCAI 2017.</li>
+    <li>Yi et al., <i>Sampling-Bias-Corrected Neural Modeling for Large Corpus Item Recommendations</i>, RecSys 2019 (logQ correction).</li>
+    <li>Johnson, Douze, Jégou, <i>Billion-scale similarity search with GPUs</i> (FAISS), 2017.</li>
+    <li>Criteo 1TB Click Logs — <a href="https://huggingface.co/datasets/criteo/CriteoClickLogs">huggingface.co/datasets/criteo/CriteoClickLogs</a> (CC BY-NC-SA 4.0).</li>
+  </ul>
+
+  <h2 id="s10"><span class="n">10</span>Mechanical, Packaging, and Orderable Information</h2>
+  <div class="tbl-wrap"><table id="pkg">
+    <caption>Package Option Addendum</caption>
+    <thead><tr><th>Artifact</th><th>Format</th><th class="r">Size</th><th>Contents</th></tr></thead><tbody></tbody>
+  </table></div>
+  <p class="tnote">Trained weights are not committed (regenerate in ~1 hour on 16 CPU threads); the pruned web models in <code>docs/assets/</code> are.</p>
+  <footer class="runfoot"><span>Generated <span data-k="generated"></span> · <a href="https://github.com/DevFrancisA/AdsRank">source</a></span><span class="pg">7</span></footer>
+</article>
+
+<div class="tip" id="tip" role="tooltip"></div>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+<script src="evm.js"></script>
+</body>
+</html>

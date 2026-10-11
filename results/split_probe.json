@@ -1,0 +1,84 @@
+{
+ "candidates": [
+  {
+   "key": "C21",
+   "item_fields": [
+    "C21",
+    "C1",
+    "C10",
+    "C20",
+    "C22"
+   ],
+   "n_items": 10000,
+   "distinct_top10": 0.019,
+   "prior_ret_1pct": 0.9645,
+   "logit_spread": 0.1031
+  },
+  {
+   "key": "C2",
+   "item_fields": [
+    "C2",
+    "C8",
+    "C15",
+    "C16",
+    "C26"
+   ],
+   "n_items": 9858,
+   "distinct_top10": 0.035,
+   "prior_ret_1pct": 0.9075,
+   "logit_spread": 0.3266
+  },
+  {
+   "key": "C10",
+   "item_fields": [
+    "C10",
+    "C1",
+    "C20",
+    "C22"
+   ],
+   "n_items": 10000,
+   "distinct_top10": 0.022,
+   "prior_ret_1pct": 0.958,
+   "logit_spread": 0.0775
+  },
+  {
+   "key": "C22",
+   "item_fields": [
+    "C22",
+    "C1",
+    "C10",
+    "C20"
+   ],
+   "n_items": 10000,
+   "distinct_top10": 0.022,
+   "prior_ret_1pct": 0.963,
+   "logit_spread": 0.0785
+  },
+  {
+   "key": "C3",
+   "item_fields": [
+    "C3",
+    "C6",
+    "C7",
+    "C24"
+   ],
+   "n_items": 10000,
+   "distinct_top10": 0.0195,
+   "prior_ret_1pct": 0.9955,
+   "logit_spread": 0.2668
+  },
+  {
+   "key": "C1",
+   "item_fields": [
+    "C1",
+    "C20",
+    "C22"
+   ],
+   "n_items": 10000,
+   "distinct_top10": 0.028,
+   "prior_ret_1pct": 0.9265,
+   "logit_spread": 0.0434
+  }
+ ],
+ "selected": "C2"
+}
