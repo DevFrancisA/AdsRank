@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end: data -> rankers -> field split -> retrieval -> ONNX -> latency -> site assets.
-# ~1-1.5 h on a 16-thread CPU. Set ADSRANK_DATA to keep data off a slow mount.
+# Set ADSRANK_DATA to keep data off a slow mount. Benchmark logs go to results/ (untracked).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PY="${PYTHON:-python}"
@@ -16,4 +16,4 @@ $PY -m adsrank.export
 # latency: run on an otherwise idle machine
 $PY -m adsrank.bench_py
 bash scripts/bench_cpp.sh
-$PY -m adsrank.export_site
+$PY -m adsrank.export_site       # pruned web models + demo payload

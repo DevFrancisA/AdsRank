@@ -1,6 +1,5 @@
 """Assemble everything the datasheet site needs into docs/assets/.
 
-  report.json          every number the page prints
   demo.json            evaluation-board payload (queries, catalog, field maps)
   ranker_web.onnx      DeepFM with its embedding table pruned to demo rows
   query_tower_web.onnx query tower, same pruning
@@ -12,19 +11,15 @@ every input it can express.
 """
 from __future__ import annotations
 
-import datetime as dt
 import json
 import math
-import platform
-import subprocess
 
-import faiss
 import numpy as np
 import onnxruntime as ort
 import torch
 
 from . import data
-from .config import ART, FIELDS, N_INT, PROC, RESULTS, SITE_ASSETS
+from .config import ART, FIELDS, N_INT, PROC, SITE_ASSETS
 from .models import ARCHS, CTRModel, Tower, TwoTower
 from .retrieval import Space, load_ranker
 
@@ -64,7 +59,6 @@ def build_demo(sp: Space, vocab):
     tt.load_state_dict(ck["tt"])
     tt.eval()
     items = np.load(ART / "catalog_items.npy")
-    freq = np.load(ART / "catalog_freq.npy")
     iv = np.load(ART / "item_vectors.npy")
     explorer = json.loads((ART / "explorer.json").read_text())
     meta = data.meta()
@@ -136,145 +130,16 @@ def build_demo(sp: Space, vocab):
         "n_items": int(len(items)), "vec_dim": int(iv.shape[1]),
         "items": item_enc.reshape(-1).tolist(),
         "item_keys": [vocab[key_field][int(k) - 2] for k in items[:, 0]],
-        "item_freq": freq.tolist(),
         "queries": queries, "k_default": int(round(0.1 * len(items))),
     }
     (SITE_ASSETS / "demo.json").write_text(json.dumps(demo, separators=(",", ":")))
-    print(f"  demo: {len(queries)} queries, pruned rows {sum(len(v) for v in vals):,} of {sum(dims):,}")
-
-
-def cpu_name() -> str:
-    try:
-        for line in open("/proc/cpuinfo"):
-            if line.startswith("model name"):
-                return line.split(":", 1)[1].strip()
-    except OSError:
-        pass
-    return platform.processor()
-
-
-def os_name() -> str:
-    try:
-        rel = dict(l.strip().split("=", 1) for l in open("/etc/os-release") if "=" in l)
-        name = rel.get("PRETTY_NAME", "").strip('"')
-        if "microsoft" in platform.release().lower():
-            name += " (WSL2)"
-        return name
-    except OSError:
-        return platform.platform()
-
-
-def build_report(sp: Space, vocab):
-    meta = data.meta()
-    split = json.loads((RESULTS / "field_split.json").read_text())
-    runs, seeds, sweeps = {}, {}, {}
-    for a in ARCHS:
-        runs[a] = json.loads((RESULTS / "runs" / f"{a}.json").read_text())
-        p = RESULTS / "runs" / f"{a}_l2_sweep.json"
-        if p.exists():
-            sweeps[a] = json.loads(p.read_text())
-        seeds[a] = [{"seed": 1, **runs[a]["test"]}] + [
-            {"seed": int(f.stem.split("_s")[-1]), **json.loads(f.read_text())["test"]}
-            for f in sorted((RESULTS / "runs").glob(f"{a}_s*.json"))]
-    ret = json.loads((RESULTS / "retrieval.json").read_text())
-    exp = json.loads((RESULTS / "export.json").read_text())
-    lat_py = json.loads((RESULTS / "latency_py.json").read_text())
-    lat_cpp = [json.loads(l) for l in (RESULTS / "latency_cpp.jsonl").read_text().splitlines() if l.strip()]
-
-    Xte, _ = data.load("test")
-    oov = (np.asarray(Xte[:200_000]) == 0).mean(axis=0)
-    fields = []
-    for j, name in enumerate(FIELDS):
-        side = "item" if j in sp.item_idx else "context"
-        if j < N_INT:
-            desc, o = "Count feature; ≤2 verbatim, else ⌊ln²x⌋ bucket", None
-        else:
-            desc, o = "Hashed categorical (32-bit, anonymised)", float(oov[j])
-        if name == split["key"]:
-            desc = "Hashed categorical — ad key: determines " + ", ".join(split["item_fields"][1:])
-        elif side == "item":
-            desc = f"Hashed categorical — ad attribute (U | {split['key']} < {split['threshold']})"
-        fields.append({"name": name, "kind": "count" if j < N_INT else "cat", "side": side,
-                       "card": int(meta["field_dims"][j]), "oov": o, "desc": desc})
-    fields_out = fields
-    fields_out_pin40 = {"name": "pCTR", "desc": "Output: sigmoid click probability, float32"}
-
-    best = min((r for r in lat_cpp if r["mode"] == "tuned"), key=lambda r: r["p95"])
-    eager = lat_py["pytorch_eager"]
-    h = ret["headline"]["two_tower_distilled"]
-    hc = ret["headline"]["two_tower_clicks"]
-    sw = sweeps.get("deepfm", [])
-    sw0 = next((r for r in sw if r["l2"] == 0), None)
-    revisions = [
-        {"change": "Data", "desc": f"{meta['n_rows']:,} impressions from the Criteo 1TB click logs (Hugging Face mirror), random "
-                                   f"80/10/10 split; base CTR {100 * meta['ctr']['test']:.2f}% on test."},
-        {"change": "Ranker", "desc": "DeepFM and LR / FM / DNN ablations peak at the end of epoch 1 and overfit in epoch 2. "
-                                     "Added per-configuration embedding-L2 selection on validation and LR decay on plateau"
-                                     + (f" (DeepFM val log loss {sw0['val']['logloss']:.5f} → {runs['deepfm']['val']['logloss']:.5f})." if sw0 else ".")},
-        *([{"change": "Ad entity", "desc": (lambda pr: f"The entropy test alone picked {split.get('entropy_key', split['key'])} as the ad key, but its catalog "
-              f"ranking was nearly query-independent (one global 1% list retained {100 * next(c for c in pr['candidates'] if c['key'] == split.get('entropy_key'))['prior_ret_1pct']:.1f}% of top-10s). "
-              f"Added a probe over all candidate entities and switched to the most query-dependent, {pr['selected']} "
-              f"({100 * next(c for c in pr['candidates'] if c['key'] == pr['selected'])['prior_ret_1pct']:.1f}%).")(json.loads((RESULTS / 'split_probe.json').read_text()))}]
-          if (RESULTS / "split_probe.json").exists() and split.get("entropy_key") not in (None, split["key"]) else []),
-        {"change": "Retrieval", "desc": f"Click-trained two-tower retained {100 * hc['retention']:.1f}% of the oracle top-10 at K = {hc['k']}. "
-                                        f"Replaced the objective with listwise distillation from DeepFM plus hard negatives: {100 * h['retention']:.1f}%."},
-        {"change": "Serving", "desc": f"Exported to ONNX (max |Δp| {exp['parity']['max_abs_diff']:.1e}); C++ harness with thread sweep and IoBinding "
-                                      f"buffers: p95 {eager['p95']:.2f} ms (PyTorch eager) → {best['p95']:.2f} ms ({best['threads']} threads)."},
-        {"change": "Rev A", "desc": f"Initial release of this sheet, {dt.date.today():%B %Y}."},
-    ]
-    vers = {"torch": torch.__version__.split("+")[0], "faiss": faiss.__version__, "ort": ort.__version__}
-    operating = [
-        ["Dataset", "Criteo 1TB click logs, day 2015-02-15 shards", f"{meta['n_rows']:,} impressions"],
-        ["Split", "random, seeded; train / val / test", " / ".join(f"{v / 1e6:.1f}M" for v in meta["split_sizes"].values())],
-        ["Base CTR", "test split", f"{100 * meta['ctr']['test']:.2f}%"],
-        ["Embedding table", f"39 fields, min count {meta['min_count']}", f"{sum(meta['field_dims']):,} rows × 16"],
-        ["Catalog", f"most frequent {split['key']} ad keys", f"{ret['n_items']:,} items"],
-        ["Evaluation queries", "held-out test contexts", f"{ret['n_eval_queries']:,}"],
-        ["Request shape", "one context × K candidates", f"int64[{exp['batch']}, 39]"],
-        ["CPU", cpu_name(), f"{torch.get_num_threads()} threads"],
-        ["OS", os_name(), "x86-64"],
-        ["Software", "PyTorch / FAISS / ONNX Runtime", f"{vers['torch']} / {vers['faiss']} / {vers['ort']}"],
-    ]
-
-    def sz(p):
-        return p.stat().st_size if p.exists() else 0
-    artifacts = [
-        {"name": "deepfm.onnx", "format": "ONNX opset 18", "bytes": sz(ART / "deepfm.onnx"), "devinfo": "ARK-3 ranker",
-         "contents": "DeepFM, int64[B,39] → float32[B]; sigmoid in-graph"},
-        {"name": "two_tower_distilled.pt", "format": "PyTorch state dict", "bytes": sz(ART / "two_tower_distilled.pt"), "devinfo": "ARK-3 retriever",
-         "contents": "query + item towers, per-item bias"},
-        {"name": "item_vectors.bin", "format": f"float32 [{ret['n_items']}, {ret['faiss']['dim']}]", "bytes": sz(SITE_ASSETS / "item_vectors.bin"),
-         "contents": "scaled item vectors ⊕ bias, FAISS input"},
-        {"name": "ranker_web.onnx", "format": "ONNX opset 17", "bytes": sz(SITE_ASSETS / "ranker_web.onnx"), "devinfo": "ARK-3 web (pruned)",
-         "contents": "DeepFM with embedding rows pruned to evaluation-board vocabulary"},
-        {"name": "query_tower_web.onnx", "format": "ONNX opset 17", "bytes": sz(SITE_ASSETS / "query_tower_web.onnx"),
-         "contents": "query tower, same pruning"},
-        {"name": "requests.bin", "format": "int64 replay file", "bytes": sz(ART / "requests.bin"),
-         "contents": f"{exp['n_requests']} fine-ranking requests for the latency harness"},
-    ]
-    for a in runs.values():
-        a["curve"] = [{k: c[k] for k in ("epoch", "auc", "logloss")} for c in a["curve"]]
-    report = {
-        "generated": f"{dt.date.today():%Y-%m-%d}", "month": f"{dt.date.today():%B %Y}".upper(),
-        "dataset": {"rows": meta["n_rows"], "split_sizes": meta["split_sizes"], "ctr": meta["ctr"],
-                    "emb_rows": int(sum(meta["field_dims"])), "min_count": meta["min_count"]},
-        "fields": fields_out, "pin40": fields_out_pin40,
-        "field_split": {k: split[k] for k in ("key", "item_fields", "context_fields", "threshold", "cat_fields", "U")},
-        "ranker": {"runs": runs, "seeds": seeds, "sweeps": sweeps},
-        "retrieval": {k: v for k, v in ret.items()},
-        "export": exp, "latency": {"py": lat_py, "cpp": lat_cpp},
-        "revisions": revisions, "operating": operating, "artifacts": artifacts,
-        "probe": json.loads((RESULTS / "split_probe.json").read_text()) if (RESULTS / "split_probe.json").exists() else None,
-    }
-    (SITE_ASSETS / "report.json").write_text(json.dumps(report, separators=(",", ":")))
-    print(f"  report.json written ({(SITE_ASSETS / 'report.json').stat().st_size / 1e3:.0f} kB)")
+    print("  demo assets written to", SITE_ASSETS)
 
 
 def main():
     sp = Space()
     vocab = json.loads((PROC / "vocab.json").read_text())
     build_demo(sp, vocab)
-    build_report(sp, vocab)
 
 
 if __name__ == "__main__":

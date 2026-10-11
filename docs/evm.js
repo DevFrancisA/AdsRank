@@ -34,6 +34,7 @@
     sel.innerHTML = st.demo.queries.map((q) => `<option value="${q.id}">test #${String(q.id).padStart(3, "0")}</option>`).join("");
     sel.addEventListener("change", () => { st.q = +sel.value; st.masked.clear(); drawPins(); run(); });
     const rng = $("#k-rng");
+    rng.max = st.demo.n_items;
     rng.value = st.demo.k_default;
     $("#k-val").textContent = rng.value;
     rng.addEventListener("input", () => ($("#k-val").textContent = rng.value));
@@ -100,7 +101,6 @@
     ["#list-f", "#list-e"].forEach((s) => $(s).classList.add("pending"));
     try {
       // stage 1+2: query tower, exact inner-product shortlist
-      const t0 = performance.now();
       const ctx = contextRow();
       const tq = await st.tower.run({ x: new ort.Tensor("int64", BigInt64Array.from(ctx.map(BigInt)), [1, ctx.length]) });
       const qv = tq.y.data;
@@ -114,25 +114,16 @@
       // stage 3: DeepFM on the shortlist
       const ps = await rank(cand, (v) => progress(0.1 * v));
       const funnel = topN(cand, ps, 10);
-      const tf = performance.now() - t0;
-      $("#ro-tf").innerHTML = `${tf.toFixed(0)}<small>ms</small>`;
-      $("#ro-calls").innerHTML = `${K.toLocaleString()}`;
-      $("#ro-calls-s").textContent = `vs. ${N.toLocaleString()} (${(100 * (1 - K / N)).toFixed(0)}% fewer)`;
       renderList("#list-f", funnel, null);
 
       // oracle: DeepFM over the entire catalog
-      const t1 = performance.now();
       const all = Array.from({ length: N }, (_, i) => i);
       const pa = await rank(all, (v) => progress(0.1 + 0.9 * v));
       const oracle = topN(all, pa, 10);
-      const te = performance.now() - t1;
       const oset = new Set(oracle.map((o) => o.item)), fset = new Set(funnel.map((o) => o.item));
-      const hits = funnel.filter((o) => oset.has(o.item)).length;
-      $("#ro-te").innerHTML = `${te.toFixed(0)}<small>ms</small>`;
-      $("#ro-ret").innerHTML = `${hits}<small>/10</small>`;
       renderList("#list-f", funnel, oset);
-      renderList("#list-e", oracle, fset, new Map(cand.map((c, i) => [c, i])));
-      setLed("on", `done · ${st.masked.size} pin${st.masked.size === 1 ? "" : "s"} masked`);
+      renderList("#list-e", oracle, fset, new Set(cand));
+      setLed("on", st.masked.size ? "done · pins masked" : "done");
     } catch (e) {
       console.error(e);
       setLed("err", "inference error");
@@ -142,16 +133,15 @@
     runBtn.disabled = false;
   }
 
-  function renderList(sel, rows, other, candRank) {
+  function renderList(sel, rows, other, shortlisted) {
     const d = st.demo, ol = $(sel);
     ol.classList.remove("pending");
     ol.innerHTML = rows.map((r) => {
-      const inOther = other ? other.has(r.item) : null;
-      const tag = other === null ? "" : sel === "#list-f"
-        ? `<span class="m">${inOther ? "IN ORACLE" : "MISS"}</span>`
-        : `<span class="m">${inOther ? "FOUND" : candRank && candRank.has(r.item) ? "RANK " + (candRank.get(r.item) + 1) : "NOT RETRIEVED"}</span>`;
-      const cls = other === null ? "" : inOther ? "hit" : "miss";
-      return `<li class="${cls}" title="${d.key_field} = ${d.item_keys[r.item]} · ${d.item_freq[r.item].toLocaleString()} train impressions"><span class="id">AD-${String(r.item + 1).padStart(5, "0")} · ${d.item_keys[r.item]}</span><span class="p">${(100 * r.p).toFixed(2)}%</span>${tag || "<span></span>"}</li>`;
+      const shared = other ? other.has(r.item) : null;
+      const tag = other === null ? "" : shared ? "SHARED"
+        : sel === "#list-f" ? "FUNNEL ONLY" : shortlisted && shortlisted.has(r.item) ? "SHORTLISTED" : "NOT SHORTLISTED";
+      const cls = other === null ? "" : shared ? "hit" : "miss";
+      return `<li class="${cls}" title="${d.key_field} = ${d.item_keys[r.item]}"><span class="id">AD-${String(r.item + 1).padStart(5, "0")} · ${d.item_keys[r.item]}</span><span></span>${tag ? `<span class="m">${tag}</span>` : "<span></span>"}</li>`;
     }).join("");
   }
 

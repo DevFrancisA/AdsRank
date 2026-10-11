@@ -7,3 +7,4 @@ build/
 *.npy
 /data/
 .DS_Store
+results/

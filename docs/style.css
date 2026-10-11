@@ -215,13 +215,6 @@ svg .crosshair { stroke: var(--ink-3); stroke-width: 1; }
 .hp.masked { background: var(--fill); border-style: dashed; color: var(--ink-3); }
 .hp.masked span { text-decoration: line-through; }
 .hp.item { border-color: var(--accent); }
-.readouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: 1px solid var(--ink); }
-.ro { padding: 8px 10px; border-right: 1px solid var(--ink); min-width: 0; }
-.ro:last-child { border-right: 0; }
-.ro .k { font: 600 10.5px var(--narrow); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
-.ro .v { font: 500 24px/1.15 var(--mono); letter-spacing: -.02em; }
-.ro .v small { font-size: 12px; color: var(--ink-2); margin-left: 2px; }
-.ro .s { font: 11.5px var(--narrow); color: var(--ink-2); }
 .lists { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .lists h4 { margin: 0 0 4px; font: 700 12px var(--narrow); letter-spacing: .08em; text-transform: uppercase; }
 ol.rank { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--ink); counter-reset: r; }
@@ -267,9 +260,6 @@ pre .c { color: var(--ink-3); }
   .titleblock h1 { font-size: 27px; }
   .stamp { justify-self: start; }
   .cols, .figs, .pinout, .lists { grid-template-columns: 1fr; }
-  .readouts { grid-template-columns: 1fr 1fr; }
-  .ro:nth-child(2) { border-right: 0; }
-  .ro:nth-child(-n+2) { border-bottom: 1px solid var(--ink); }
   .toc, .twocol { columns: 1; }
   .schem { overflow-x: auto; }
   .schem svg { min-width: 680px; }
